@@ -1,0 +1,24 @@
+{
+  "name": "cluster2",
+  "version": "0.5.0-SNAPSHOT",
+  "dependencies": {
+    "underscore": {
+      "version": "1.4.4",
+      "from": "underscore@1.4.4"
+    },
+    "usage": {
+      "version": "0.3.9",
+      "from": "usage@~0.3.8",
+      "dependencies": {
+        "bindings": {
+          "version": "1.1.1",
+          "from": "bindings@1.x.x"
+        }
+      }
+    },
+    "when": {
+      "version": "2.3.0",
+      "from": "when@2.3.0"
+    }
+  }
+}

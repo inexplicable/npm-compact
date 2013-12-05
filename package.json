@@ -1,0 +1,30 @@
+{
+    "author": "cubejs",
+    "contributors": [{
+        "name": "Roy Zhou",
+        "email": "huzhou@ebay.com"
+    }],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/cubejs/npm-compact.git"
+    },
+    "name": "npm-compact",
+    "version": "0.0.1-SNAPSHOT",
+    "engines": {
+        "node": ">= 0.10.0"
+    },
+    "main": "index.js",
+    "dependencies": {
+        "underscore": "~1.4.4"
+    },
+    "devDependencies": {
+        "mocha": "~1.11.0",
+        "should": "~1.2.2"
+    },
+    "scripts": {
+        "test": "mocha --ui bdd --timeout 10s --reporter spec  ./test/*.js"
+    },
+    "publishConfig": {
+        "registry": "https://registry.npmjs.org"
+    }
+}
