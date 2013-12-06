@@ -4,6 +4,16 @@ var _ = require('underscore');
 
 /**
  * @param pkg is the json of the source module's dependencies tree representing the npm dependencies, obtained via npm ls -json or npm shrinkwrap
+ * @manifest a map of dependency name & version which forces the pkg to comply with
+ * @return an altered pkg json whose dependencies have been forced to comply with the manifest
+ */
+exports.force = function force(pkg, manifest){
+
+	return pkg;
+};
+
+/**
+ * @param pkg is the json of the source module's dependencies tree representing the npm dependencies, obtained via npm ls -json or npm shrinkwrap
  * @return an optimized pkg json mainly compacting duplicate node modules dependencies
  * NOTE npm install is smart enough to cache the same dependencies (name + version) for decendent dependencies to reuse because of the resolution mechanism
  * what it couldn't deduplicate is in the cases of branched dependencies, for example:
@@ -22,7 +32,9 @@ exports.compact = function compact(pkg){
 	//for each visiting dep node, we'll do another depth 1st traversal of the deps tree to find all duplicates
 		//as long as there're duplicates, we'll place the dep node to their least common ancestor dep node, all of the prev deps nodes will be detached from their parent dep node
 		//there're one more validation needed, the parent dep node where we're going to put the merged dep node should not have conflict verions, otherwise this attempt must be rejected
-	return clean(traverse(transform(pkg, null, pkg.name, 0)));
+	var name = pkg.name;
+
+	return _.extend(clean(traverse(transform(pkg, null, name, 0))), {'name': name});
 };
 
 /**
@@ -215,6 +227,7 @@ function clean(root){
 
 	delete root['parent'];
 	delete root['depth'];
+	delete root['name'];
 
 	if(!_.isEmpty(root.dependencies)){
 	
