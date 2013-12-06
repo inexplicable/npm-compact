@@ -16,8 +16,6 @@ describe('main', function(){
 			var compacted = compact(require('./ls'));
 			compacted.should.be.ok;
 
-			console.log('compacted:%j', compacted);
-
 			done();
 		});
 

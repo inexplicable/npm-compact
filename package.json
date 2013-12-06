@@ -22,7 +22,7 @@
         "should": "~1.2.2"
     },
     "scripts": {
-        "test": "mocha --ui bdd --timeout 10s --reporter spec  ./test/*.js"
+        "test": "mocha --ui bdd --timeout 1000s --reporter spec  ./test/*.js"
     },
     "publishConfig": {
         "registry": "https://registry.npmjs.org"

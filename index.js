@@ -22,35 +22,60 @@ exports.compact = function compact(pkg){
 	//for each visiting dep node, we'll do another depth 1st traversal of the deps tree to find all duplicates
 		//as long as there're duplicates, we'll place the dep node to their least common ancestor dep node, all of the prev deps nodes will be detached from their parent dep node
 		//there're one more validation needed, the parent dep node where we're going to put the merged dep node should not have conflict verions, otherwise this attempt must be rejected
-
-	var transformed = transform(pkg, null, pkg.name);
-
-	traverse(transformed, transformed);
-
-	return clean(transformed);
+	return clean(traverse(transform(pkg, null, pkg.name, 0)));
 };
 
-function transform(root, parent, name){
+/**
+ * @param root (root of the deps tree)
+ * @param parent (parent node of the current level)
+ * @param name of the dependency
+ * @param depth of the current level, starting from 0
+ *
+ * transformation traverse the deps tree, turn each 'dependencies' object structure into an array, add 'name', 'parent', 'depth' information to each dep node
+ * @return a graph of dependencies
+ */
+function transform(root, parent, name, depth){
 
 	_.extend(root, {
 		'name': name,
-		'parent': parent
+		'parent': parent,
+		'depth': depth
 	});
 
 	var deps = root.dependencies;
-	
 	if(!deps){
+		root.dependencies = [];
 		return root;
 	}
 
 	root.dependencies = _.map(deps, function(dep, name){
-		return transform(dep, root, name);
+		return transform(dep, root, name, depth + 1);
 	});
 
 	return root;
 }
 
-function traverse(root, current){
+//just a wrapper of #doTraverse to return the same root;
+function traverse(root){
+
+	doTraverse(root, root);
+	
+	return root;
+}
+
+/**
+ * @param root of the dependencies graph
+ * @param current, node being visited
+ *
+ * @return root of the dependencies graph as @param root
+ * 
+ * traverse does a breath-first traversal of the dependencies graph
+ * at each node, it looks for other dependencies node sharing the same name & version @see #matches
+ * when there're matches, we'll try getting the least common ancestor of them, and put the dependency there
+ * the common ancestor should not have existing dependency whose version conflicts with the attempt
+ * 
+ */
+function doTraverse(root, current){
 
 	var deps = current.dependencies;
 
@@ -62,54 +87,134 @@ function traverse(root, current){
 	_.each(deps, function(dep){
 
 		var matches = match(root, dep);
-		if(!matches){
-			traverse(root, dep);
+		if(!matches || !matches.length){
+			//no matches, go to next dep
+			doTraverse(root, dep);
 		}
 		else{
-			var common = lca(root, matches);
-			if(!validate(root, common, dep)){
-				traverse(root, dep);
+			var common = lca(matches.concat([dep]), dep);
+			//no common ancestor found, or conflict rejects the attempt, go to next dep
+			if(!common || _.some(common.dependencies, function(d){
+					
+					return d.name === dep.name && d.version !== dep.version;
+				})){
+
+				doTraverse(root, dep);
 			}
 			else{
+			//common ancestor derived, put the shared dependency here to reduce the downloads
 				common.dependencies.push(dep);
-				_.each(matches.concat(dep), function(match){
+			//remove the dependency from where it used to be
+				_.each(matches.concat([dep]), function(match){
 					match.parent.dependencies = _.without(match.parent.dependencies, match);
 				});
 			}
 		}
 	});
-}
-
-function match(root, dep){
-
-	if(!root || !root.dependencies){
-
-		return null;
-	}
-	
-	return _.compact(_.reduce(root.dependencies, function(memoize, d){
-			
-			if(d !== dep && d.name === dep.name && d.version === dep.version){
-				memoize.push(d);
-			}
-			return memoize;
-
-		}, []));
-}
-
-function lca(root, matches){
 
 	return root;
 }
 
-function validate(root, ancestor, dep){
+/**
+ * @param current
+ * @param dep
+ * @return an array of dependencies node whose name & version are the same as 'dep'
+ */
+function match(current, dep){
+	//end of recursion
+	if(!current || !current.dependencies || current === dep){
 
-	return true;
+		return [];
+	}
+	//matches the dependency, try sharing
+	else if(current.name === dep.name && current.version === dep.version){
+
+		return [current];
+	}
+	else{
+	//go to children dependencies to look for shared dependency
+		return _.compact(_.reduce(current.dependencies, function(memoize, d){
+				
+				return memoize.concat(match(d, dep));
+
+			}, []));
+	}
 }
 
+/**
+ * @param matches an array of common dependencies
+ * @param the shared dependency
+ * @return null when there couldn't be a common ancestor, or a node in the dependencies tree as the common ancestor of all @param matches
+ */
+function lca(matches, dep){
+
+	//error case
+	if(!matches || !matches.length){
+		return null;
+	}
+	//end, found the ancestor
+	else if(matches.length < 2){
+		return matches[0]
+	}
+	else{
+		//find the highest node in the matches
+		var minDepth = _.min(_.map(matches, function(m){
+			return m.depth;
+		}));
+
+		//move everyone else to the same depth
+		var branches = _.map(matches, function(m){
+
+			var delta = m.depth - minDepth;
+
+			while(delta){
+
+				m = m.parent;
+				delta -= 1;
+
+				if(m.name === dep.name && m.version !== dep.version){
+					return null;
+				}
+			}
+
+			return m;
+		});
+		//fail early if not all branches are non-null
+		if(!_.every(branches)){
+			return null;
+		}
+		//move every branch towards root, merge at each time, fail early each time a null is found, till they converge 
+		for(branches = _.uniq(branches); minDepth && branches.length > 1; minDepth -= 1, branches = _.uniq(branches)){
+			branches = _.map(branches, function(b){
+
+				b = b.parent;
+				if(b.name === dep.name && b.version !== dep.version){
+					return null;
+				}
+				else{
+					return b;
+				}
+			});
+
+			if(!_.every(branches)){
+				return null;
+			}
+		}
+
+		return branches.length === 1 ? branches [0] : null;
+	}
+}
+
+/**
+ * @param root of the dependencies graph
+ * @return root of the restored dependencies tree
+ * 
+ * a clean up of the traversed graph, to cut 'parent' and other redundant information added
+ */
 function clean(root){
 
 	delete root['parent'];
+	delete root['depth'];
 
 	if(!_.isEmpty(root.dependencies)){
 	
@@ -119,6 +224,10 @@ function clean(root){
 
 				return memoize;
 			}, {});
+	}
+	else{
+
+		delete root['dependencies'];
 	}
 
 	return root;

@@ -1,0 +1,42 @@
+{
+  "name": "fe-collections",
+  "version": "0.4.0",
+  "dependencies": {
+    "raptor": {
+      "version": "2.4.42",
+      "from": "raptor@2.4.42",
+      "dependencies": {
+        "uglify-js": {
+          "version": "1.3.5",
+          "from": "uglify-js@1.3.x"
+        },
+        "mime": {
+          "version": "1.2.11",
+          "from": "mime@~1.2.9"
+        },
+        "sax": {
+          "version": "0.4.3",
+          "from": "sax@~0.4.2"
+        }
+      }
+    },
+    "sth": {
+      "version": "1.0.0",
+      "from": "sth@1.0.0",
+      "dependencies": {
+        "uglify-js": {
+          "version": "1.3.5",
+          "from": "uglify-js@1.3.x"
+        }
+      }
+    },
+    "uglify-js": {
+      "version": "1.3.6",
+      "from": "uglify-js@1.3.x"
+    },
+    "mime": {
+      "version": "1.2.11",
+      "from": "mime@~1.2.9"
+    }
+  }
+}
