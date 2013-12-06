@@ -7,10 +7,33 @@ var _ = require('underscore');
  * @manifest a map of dependency name & version which forces the pkg to comply with
  * @return an altered pkg json whose dependencies have been forced to comply with the manifest
  */
-exports.force = function force(pkg, manifest){
+exports.force = function force(shrinkwrap, manifest){
 
-	return pkg;
+	var name = shrinkwrap.name;
+
+	return _.extend(clean(compliance(transform(shrinkwrap, null, name, 0), manifest)), {'name':name});
 };
+
+function compliance(root, manifest){
+
+	doTraverse(root, root, function action(dep){
+
+		var expect = manifest[dep.name];
+		if(expect){
+			//force to comply with the version
+			_.extend(dep, {
+				'version': expect.version,
+				'resolved': expect.resolved
+			});
+		}
+
+		_.each(dep.dependencies || [], function(d){
+			doTraverse(root, dep, action);
+		});
+	});
+
+	return root;
+}
 
 /**
  * @param pkg is the json of the source module's dependencies tree representing the npm dependencies, obtained via npm ls -json or npm shrinkwrap
@@ -25,16 +48,16 @@ exports.force = function force(pkg, manifest){
  * besides, it could be a possible side-effect that compatible versions would in the end resolve to a single module dependency and therefore avoid some of
  * the globals needed where some modules require 'singleton' pattern or equivalent.
  */
-exports.compact = function compact(pkg){
+exports.compact = function compact(shrinkwrap){
 
 	//impl quick draft
-	//in a brute forced manner, we'll do a depth 1st traversal of the deps tree
+	//in a brute forced manner, we'll do a breath 1st traversal of the deps tree
 	//for each visiting dep node, we'll do another depth 1st traversal of the deps tree to find all duplicates
 		//as long as there're duplicates, we'll place the dep node to their least common ancestor dep node, all of the prev deps nodes will be detached from their parent dep node
 		//there're one more validation needed, the parent dep node where we're going to put the merged dep node should not have conflict verions, otherwise this attempt must be rejected
-	var name = pkg.name;
+	var name = shrinkwrap.name;
 
-	return _.extend(clean(traverse(transform(pkg, null, name, 0))), {'name': name});
+	return _.extend(clean(converge(transform(shrinkwrap, null, name, 0))), {'name': name});
 };
 
 /**
@@ -68,9 +91,36 @@ function transform(root, parent, name, depth){
 }
 
 //just a wrapper of #doTraverse to return the same root;
-function traverse(root){
+function converge(root){
 
-	doTraverse(root, root);
+	doTraverse(root, root, function action(dep){
+
+		var matches = match(root, dep);
+		if(!matches || !matches.length){
+			//no matches, go to next dep
+			doTraverse(root, dep, action);
+		}
+		else{
+			var common = lca(matches.concat([dep]), dep);
+			//no common ancestor found, or conflict rejects the attempt, go to next dep
+			if(!common || _.some(common.dependencies, function(d){
+					
+					return d.name === dep.name && d.version !== dep.version;
+				})){
+
+				doTraverse(root, dep, action);
+			}
+			else{
+			//common ancestor derived, put the shared dependency here to reduce the downloads
+				common.dependencies.push(dep);
+			//remove the dependency from where it used to be
+				_.each(matches.concat([dep]), function(match){
+					match.parent.dependencies = _.without(match.parent.dependencies, match);
+				});
+			//TODO, should we go deeper?
+			}
+		}
+	});
 	
 	return root;
 }
@@ -87,7 +137,7 @@ function traverse(root){
  * the common ancestor should not have existing dependency whose version conflicts with the attempt
  * 
  */
-function doTraverse(root, current){
+function doTraverse(root, current, action){
 
 	var deps = current.dependencies;
 
@@ -96,33 +146,7 @@ function doTraverse(root, current){
 		return;
 	}
 
-	_.each(deps, function(dep){
-
-		var matches = match(root, dep);
-		if(!matches || !matches.length){
-			//no matches, go to next dep
-			doTraverse(root, dep);
-		}
-		else{
-			var common = lca(matches.concat([dep]), dep);
-			//no common ancestor found, or conflict rejects the attempt, go to next dep
-			if(!common || _.some(common.dependencies, function(d){
-					
-					return d.name === dep.name && d.version !== dep.version;
-				})){
-
-				doTraverse(root, dep);
-			}
-			else{
-			//common ancestor derived, put the shared dependency here to reduce the downloads
-				common.dependencies.push(dep);
-			//remove the dependency from where it used to be
-				_.each(matches.concat([dep]), function(match){
-					match.parent.dependencies = _.without(match.parent.dependencies, match);
-				});
-			}
-		}
-	});
+	_.each(deps, action);
 
 	return root;
 }
