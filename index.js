@@ -117,7 +117,8 @@ function converge(root){
 				_.each(matches.concat([dep]), function(match){
 					match.parent.dependencies = _.without(match.parent.dependencies, match);
 				});
-			//TODO, should we go deeper?
+			//going deeper
+				doTraverse(root, dep, action);
 			}
 		}
 	});
