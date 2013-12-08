@@ -19,7 +19,8 @@
     },
     "devDependencies": {
         "mocha": "~1.11.0",
-        "should": "~1.2.2"
+        "should": "~1.2.2",
+        "clone": "~0.1.11"
     },
     "scripts": {
         "test": "mocha --ui bdd --timeout 1000s --reporter spec  ./test/*.js"

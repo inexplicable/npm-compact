@@ -1,6 +1,8 @@
 'use strict';
 
-var _ = require('underscore');
+var _ = require('underscore'),
+	transform = require('./lib/utils').transform,
+	clean = require('./lib/utils').clean;
 
 /**
  * @param pkg is the json of the source module's dependencies tree representing the npm dependencies, obtained via npm ls -json or npm shrinkwrap
@@ -13,27 +15,6 @@ exports.force = function force(shrinkwrap, manifest){
 
 	return _.extend(clean(compliance(transform(shrinkwrap, null, name, 0), manifest)), {'name':name});
 };
-
-function compliance(root, manifest){
-
-	doTraverse(root, root, function action(dep){
-
-		var expect = manifest[dep.name];
-		if(expect){
-			//force to comply with the version
-			_.extend(dep, {
-				'version': expect.version,
-				'resolved': expect.resolved
-			});
-		}
-
-		_.each(dep.dependencies || [], function(d){
-			doTraverse(root, dep, action);
-		});
-	});
-
-	return root;
-}
 
 /**
  * @param pkg is the json of the source module's dependencies tree representing the npm dependencies, obtained via npm ls -json or npm shrinkwrap
@@ -60,31 +41,23 @@ exports.compact = function compact(shrinkwrap){
 	return _.extend(clean(converge(transform(shrinkwrap, null, name, 0))), {'name': name});
 };
 
-/**
- * @param root (root of the deps tree)
- * @param parent (parent node of the current level)
- * @param name of the dependency
- * @param depth of the current level, starting from 0
- *
- * transformation traverse the deps tree, turn each 'dependencies' object structure into an array, add 'name', 'parent', 'depth' information to each dep node
- * @return a graph of dependencies
- */
-function transform(root, parent, name, depth){
+//a wrapper around #doTraverse whose action is to force the version/resolved compliance of dependencies which match the manifest
+function compliance(root, manifest){
 
-	_.extend(root, {
-		'name': name,
-		'parent': parent,
-		'depth': depth
-	});
+	doTraverse(root, root, function action(dep){
 
-	var deps = root.dependencies;
-	if(!deps){
-		root.dependencies = [];
-		return root;
-	}
+		var expect = manifest[dep.name];
+		if(expect){
+			//force to comply with the version
+			_.extend(dep, {
+				'version': expect.version,
+				'resolved': expect.resolved
+			});
+		}
 
-	root.dependencies = _.map(deps, function(dep, name){
-		return transform(dep, root, name, depth + 1);
+		_.each(dep.dependencies || [], function(d){
+			doTraverse(root, dep, action);
+		});
 	});
 
 	return root;
@@ -240,33 +213,4 @@ function lca(matches, dep){
 
 		return branches.length === 1 ? branches [0] : null;
 	}
-}
-
-/**
- * @param root of the dependencies graph
- * @return root of the restored dependencies tree
- * 
- * a clean up of the traversed graph, to cut 'parent' and other redundant information added
- */
-function clean(root){
-
-	delete root['parent'];
-	delete root['depth'];
-	delete root['name'];
-
-	if(!_.isEmpty(root.dependencies)){
-	
-		root.dependencies = _.reduce(root.dependencies, function(memoize, dep){
-
-				memoize[dep.name] = clean(dep);
-
-				return memoize;
-			}, {});
-	}
-	else{
-
-		delete root['dependencies'];
-	}
-
-	return root;
 }
