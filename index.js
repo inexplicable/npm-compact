@@ -29,16 +29,21 @@ exports.force = function force(shrinkwrap, manifest){
  * besides, it could be a possible side-effect that compatible versions would in the end resolve to a single module dependency and therefore avoid some of
  * the globals needed where some modules require 'singleton' pattern or equivalent.
  */
-exports.compact = function compact(shrinkwrap){
+exports.compact = function compact(shrinkwrap, accuracy){
 
 	//impl quick draft
 	//in a brute forced manner, we'll do a breath 1st traversal of the deps tree
 	//for each visiting dep node, we'll do another depth 1st traversal of the deps tree to find all duplicates
 		//as long as there're duplicates, we'll place the dep node to their least common ancestor dep node, all of the prev deps nodes will be detached from their parent dep node
 		//there're one more validation needed, the parent dep node where we're going to put the merged dep node should not have conflict verions, otherwise this attempt must be rejected
-	var name = shrinkwrap.name;
+	var name = shrinkwrap.name,
+		graph = transform(shrinkwrap, null, name, 0);
 
-	return _.extend(clean(converge(transform(shrinkwrap, null, name, 0))), {'name': name});
+	accuracy = accuracy || function(versionExpected, actualVersion){
+		return versionExpected === actualVersion;
+	};
+
+	return _.extend(clean(converge(graph, accuracy)), {'name': name});
 };
 
 //a wrapper around #doTraverse whose action is to force the version/resolved compliance of dependencies which match the manifest
@@ -64,35 +69,37 @@ function compliance(root, manifest){
 }
 
 //just a wrapper of #doTraverse to return the same root;
-function converge(root){
+function converge(root, accuracy){
 
 	doTraverse(root, root, function action(dep){
 
-		var matches = match(root, dep);
-		if(!matches || !matches.length){
+		var matches = match(root, dep, accuracy);
+
+		if(matches.length === 1){ //it's the dep itself, nothing to merge with it
 			//no matches, go to next dep
 			doTraverse(root, dep, action);
 		}
 		else{
-			var common = lca(matches.concat([dep]), dep);
-			//no common ancestor found, or conflict rejects the attempt, go to next dep
-			if(!common || _.some(common.dependencies, function(d){
-					
-					return d.name === dep.name && d.version !== dep.version;
-				})){
+			var latest = _.last(matches),//asc order, need the largest version
+				common = lca(matches, latest, accuracy);
 
-				doTraverse(root, dep, action);
-			}
-			else{
-			//common ancestor derived, put the shared dependency here to reduce the downloads
-				common.dependencies.push(dep);
-			//remove the dependency from where it used to be
-				_.each(matches.concat([dep]), function(match){
-					match.parent.dependencies = _.without(match.parent.dependencies, match);
+			//common ancestor found, no conflict rejects the attempt
+			if(common && !_.some(common.dependencies, function(d){
+					
+					return latest.name === d.name && !accuracy(latest.version, d.version);
+				})){
+				
+				//remove the dependency from where it used to be
+				_.each(matches, function(detach){
+					detach.parent.dependencies = _.without(detach.parent.dependencies, detach);
 				});
-			//going deeper
-				doTraverse(root, dep, action);
+
+				//common ancestor derived, put the shared dependency here to reduce the downloads
+				common.dependencies.push(latest);
 			}
+
+			//going deeper
+			doTraverse(root, dep, action);
 		}
 	});
 	
@@ -130,24 +137,27 @@ function doTraverse(root, current, action){
  * @param dep
  * @return an array of dependencies node whose name & version are the same as 'dep'
  */
-function match(current, dep){
+function match(current, dep, accuracy){
 	//end of recursion
-	if(!current || !current.dependencies || current === dep){
+	if(!current || !current.dependencies){
 
 		return [];
 	}
 	//matches the dependency, try sharing
-	else if(current.name === dep.name && current.version === dep.version){
+	else if(dep.name === current.name && accuracy(dep.version, current.version)){
 
 		return [current];
 	}
 	else{
 	//go to children dependencies to look for shared dependency
-		return _.compact(_.reduce(current.dependencies, function(memoize, d){
-				
-				return memoize.concat(match(d, dep));
+		var matchFromDescendents = _.reduce(current.dependencies, function(memoize, d){
+				return memoize.concat(match(d, dep, accuracy));
+			}, []);
 
-			}, []));
+		matchFromDescendents = _.compact(matchFromDescendents);
+		matchFromDescendents = _.sortBy(matchFromDescendents, 'version');
+
+		return matchFromDescendents;
 	}
 }
 
@@ -156,7 +166,7 @@ function match(current, dep){
  * @param the shared dependency
  * @return null when there couldn't be a common ancestor, or a node in the dependencies tree as the common ancestor of all @param matches
  */
-function lca(matches, dep){
+function lca(matches, dep, accuracy){
 
 	//error case
 	if(!matches || !matches.length){
@@ -182,33 +192,26 @@ function lca(matches, dep){
 				m = m.parent;
 				delta -= 1;
 
-				if(m.name === dep.name && m.version !== dep.version){
+				if(dep.name === m.name && !accuracy(dep.version, m.version)){
 					return null;
 				}
 			}
 
 			return m;
 		});
-		//fail early if not all branches are non-null
-		if(!_.every(branches)){
-			return null;
-		}
+		
 		//move every branch towards root, merge at each time, fail early each time a null is found, till they converge 
-		for(branches = _.uniq(branches); minDepth && branches.length > 1; minDepth -= 1, branches = _.uniq(branches)){
+		for(branches = _.uniq(branches); minDepth && branches.length > 1 && _.every(branches); minDepth -= 1, branches = _.uniq(branches)){
 			branches = _.map(branches, function(b){
 
 				b = b.parent;
-				if(b.name === dep.name && b.version !== dep.version){
+				if(dep.name === b.name && !accuracy(dep.version, b.version)){
 					return null;
 				}
 				else{
 					return b;
 				}
 			});
-
-			if(!_.every(branches)){
-				return null;
-			}
 		}
 
 		return branches.length === 1 ? branches [0] : null;

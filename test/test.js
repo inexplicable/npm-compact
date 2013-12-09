@@ -77,6 +77,41 @@ describe('main', function(){
 			done();
 		});
 
+		it('should merge common dependencies given loosen accuracy', function(done){
+
+			var origin = require('./accuracy.json'), //accuracy is the same as collision.json, but we'll give differnt accuracy function here
+				become = compact(clone(origin), function(versionExpected, actualVersion){
+					
+					if(versionExpected === actualVersion){
+						return true;
+					}
+
+					var expected = versionExpected.split('\.'),
+						actual = actualVersion.split('\.');
+
+					return expected[0] === actual[0] && expected[1] === actual[1];
+				});
+
+			become.should.be.ok;
+
+			_.isEqual(origin, become).should.equal(false);
+
+			collect(origin, 'raptor').length.should.equal(1);
+			collect(origin, 'sax', '0.4.3').length.should.equal(1);
+			collect(origin, 'mime', '1.2.11').length.should.equal(2);
+			collect(origin, 'uglify-js', '1.3.5').length.should.equal(2);
+			collect(origin, 'uglify-js', '1.3.6').length.should.equal(1);
+
+			collect(become, 'raptor').length.should.equal(1);
+			collect(become, 'sax', '0.4.3').length.should.equal(1);
+			collect(become, 'mime', '1.2.11').length.should.equal(1);
+			//the common ancestor has 1.3.6 only
+			collect(become, 'uglify-js', '1.3.5').length.should.equal(0);
+			collect(become, 'uglify-js', '1.3.6').length.should.equal(1);
+
+			done();
+		});
+
 		it('should work for a large shrinkwrap too', function(done){
 
 			var origin = require('./large.json'),
