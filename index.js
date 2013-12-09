@@ -88,7 +88,7 @@ function converge(root, accuracy){
 					
 					return latest.name === d.name && !accuracy(latest.version, d.version);
 				})){
-				
+
 				//remove the dependency from where it used to be
 				_.each(matches, function(detach){
 					detach.parent.dependencies = _.without(detach.parent.dependencies, detach);
@@ -177,43 +177,42 @@ function lca(matches, dep, accuracy){
 		return matches[0]
 	}
 	else{
-		//find the highest node in the matches
-		var minDepth = _.min(_.map(matches, function(m){
-			return m.depth;
-		}));
+		//find the highest/closest node in the matches to the root
+		var closest = _.min(_.map(matches, function(m){
+				return m.depth;
+			})),
+			climb = function climb(branch, height){
+
+				while(height){
+					//climb is a function of the dep node to its parent, so long as there's no dep version collision	
+					branch = branch.parent;
+					height -= 1;
+
+					if(dep.name === branch.name && !accuracy(dep.version, branch)){
+						return null;
+					}
+				}
+
+				return branch;
+			};
 
 		//move everyone else to the same depth
-		var branches = _.map(matches, function(m){
-
-			var delta = m.depth - minDepth;
-
-			while(delta){
-
-				m = m.parent;
-				delta -= 1;
-
-				if(dep.name === m.name && !accuracy(dep.version, m.version)){
-					return null;
-				}
-			}
-
-			return m;
-		});
+		var heights = _.map(matches, function(m){
+				return m.depth - closest;
+			}),
+			branches = _.uniq(_.map(matches, function(m, index){
+				return climb(m, heights[index]);
+			}));
 		
 		//move every branch towards root, merge at each time, fail early each time a null is found, till they converge 
-		for(branches = _.uniq(branches); minDepth && branches.length > 1 && _.every(branches); minDepth -= 1, branches = _.uniq(branches)){
-			branches = _.map(branches, function(b){
+		while(closest && branches.length > 1 && _.every(branches)){
 
-				b = b.parent;
-				if(dep.name === b.name && !accuracy(dep.version, b.version)){
-					return null;
-				}
-				else{
-					return b;
-				}
-			});
+			branches = _.uniq(_.map(branches, function(b){
+				return climb(b, 1);
+			}));
+			closest -= 1;
 		}
-
+		
 		return branches.length === 1 ? branches [0] : null;
 	}
 }
