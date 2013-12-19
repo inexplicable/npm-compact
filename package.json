@@ -9,16 +9,16 @@
         "url": "https://github.com/cubejs/npm-compact.git"
     },
     "name": "npm-compact",
-    "version": "0.0.1-SNAPSHOT",
+    "version": "0.1.0-SNAPSHOT",
     "engines": {
-        "node": ">= 0.10.0"
+        "node": ">= 0.8.0"
     },
     "main": "index.js",
     "dependencies": {
-        "underscore": "~1.4.4"
+        "underscore": "~1.5.2"
     },
     "devDependencies": {
-        "mocha": "~1.11.0",
+        "mocha": "~1.15.0",
         "should": "~1.2.2",
         "clone": "~0.1.11"
     },
