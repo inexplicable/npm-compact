@@ -1,7 +1,7 @@
 'use strict';
 
-var _ = require('underscore'),
-	semver = require('semver'),
+var npm = require('npm'),
+	_ = require('underscore'),
 	utils = require('./lib/utils'),
 	clean = utils.clean,
 	transform = utils.transform;
@@ -11,11 +11,25 @@ var _ = require('underscore'),
  * @manifest a map of dependency name & version which forces the pkg to comply with
  * @return an altered pkg json whose dependencies have been forced to comply with the manifest
  */
-exports.force = function force(shrinkwrap, manifest){
+exports.force = function force(shrinkwrap, manifest, cb){
 
-	var name = shrinkwrap.name;
+	npm.load(manifest, function(err){
 
-	return _.extend(clean(compliance(transform(shrinkwrap, null, name, 0), manifest)), {'name':name});
+		npm.commands.install([], function(err, installed){
+			
+			npm.commands.shrinkwrap([], function(err, shrinkwrapped){
+
+				npm.commands.uninstall(installed, function(err){
+					
+					_.extend(shrinkwrap.dependencies, shrinkwrapped.dependencies);
+
+					var name = shrinkwrap.name;
+
+					cb(_.extend(clean(compliance(transform(shrinkwrap, null, name, 0), shrinkwrapped.dependencies)), {'name':name}));
+				});
+			});
+		});
+	});
 };
 
 /**
@@ -53,18 +67,17 @@ function compliance(root, manifest){
 
 	doTraverse(root, root, function action(dep){
 
-		var expect = manifest[dep.name];
-		if(expect){
-			//force to comply with the version
-			_.extend(dep, {
-				'version': expect.version,
-				'resolved': expect.resolved
+		if(!manifest[dep.name]){
+			_.each(dep.dependencies || [], function(d){
+				doTraverse(root, dep, action);
 			});
 		}
-
-		_.each(dep.dependencies || [], function(d){
-			doTraverse(root, dep, action);
-		});
+		else{
+			//remove the dependencies immediately if it's not under root
+			if(dep.parent !== root){
+				dep.parent.dependencies = _.without(dep.parent.dependencies, dep);
+			}
+		}
 	});
 
 	return root;
@@ -157,7 +170,7 @@ function match(current, dep, accuracy){
 			}, []);
 
 		matchFromDescendents = _.compact(matchFromDescendents).sort(function(d1, d2){
-			return semver.compare(d1.version, d2.version);
+			return require('semver').compare(d1.version, d2.version);
 		});
 
 		return matchFromDescendents;

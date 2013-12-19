@@ -123,6 +123,25 @@ describe('main', function(){
 			done();
 		});
 	});
+
+	describe('#force', function(){
+
+		var force = require('../index').force,
+			origin = require('./large.json'),
+			manifest = clone(origin);
+
+		it('should load npm and work with install & shrinkwrap', function(done){
+
+			force.should.be.ok;
+
+			force(clone(origin), manifest, function(forced){
+
+				forced.should.be.ok;
+
+				done();
+			});
+		});
+	})
 });
 
 //testing utility
