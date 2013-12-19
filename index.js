@@ -1,8 +1,10 @@
 'use strict';
 
 var _ = require('underscore'),
-	transform = require('./lib/utils').transform,
-	clean = require('./lib/utils').clean;
+	semver = require('semver'),
+	utils = require('./lib/utils'),
+	clean = utils.clean,
+	transform = utils.transform;
 
 /**
  * @param pkg is the json of the source module's dependencies tree representing the npm dependencies, obtained via npm ls -json or npm shrinkwrap
@@ -154,8 +156,9 @@ function match(current, dep, accuracy){
 				return memoize.concat(match(d, dep, accuracy));
 			}, []);
 
-		matchFromDescendents = _.compact(matchFromDescendents);
-		matchFromDescendents = _.sortBy(matchFromDescendents, 'version');
+		matchFromDescendents = _.compact(matchFromDescendents).sort(function(d1, d2){
+			return semver.compare(d1.version, d2.version);
+		});
 
 		return matchFromDescendents;
 	}
